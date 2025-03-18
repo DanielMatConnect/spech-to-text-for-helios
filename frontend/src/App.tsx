@@ -10,7 +10,7 @@ const App: React.FC = () => {
   const [transcript, setTranscript] = useState<string>('');
   const [formData, setFormData] = useState<FormData | null>(null);
   const [isProcessingTranscript, setIsProcessingTranscript] = useState<boolean>(false);
-  const [isProcessingForm, setIsProcessingForm] = useState<boolean>(false);
+  const [isProcessingForm] = useState(false);
 
   const handleTranscriptReceived = (text: string) => {
     setTranscript(text);

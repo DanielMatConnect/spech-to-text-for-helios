@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - OPENAI_URL=http://localhost:11434
+      - OPENAI_MODEL=llama3
+    volumes:
+      - audio-uploads:/app/uploads
+    depends_on:
+      - llm-service
+    networks:
+      - app-network
+
+  llm-service:
+    build:
+      context: ./local-llm-api
+      dockerfile: Dockerfile
+    ports:
+      - "11434:11434"
+    volumes:
+      - llm-models:/root/.ollama
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  audio-uploads:
+    driver: local
+  llm-models:
+    driver: local 
