@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TranscriptDto } from 'src/common/dto';
@@ -9,22 +9,24 @@ import { nodewhisper, IOptions } from 'nodejs-whisper';
 
 @Injectable()
 export class AudioService {
+  private readonly logger = new Logger(AudioService.name);
   private readonly tempDir = path.join(process.cwd(), 'uploads');
   private readonly defaultOptions: IOptions = {
-    modelName: 'base',
+    modelName: 'large-v3-turbo',
     withCuda: false,
-    removeWavFileAfterTranscription: false,
-    logger: console,
+    removeWavFileAfterTranscription: true,
+    logger: undefined
   };
 
   constructor() {
     if (!fs.existsSync(this.tempDir)) {
+      this.logger.log(`Creando directorio temporal: ${this.tempDir}`);
       fs.mkdirSync(this.tempDir, { recursive: true });
     }
   }
 
   async transcribeAudio(file: Multer.File): Promise<TranscriptDto> {
-    // Se extrae la extensión; sin importar cuál sea, se realizará conversión a WAV
+    this.logger.log('Iniciando proceso de transcripción de audio');
     const ext = file.mimetype.split('/')[1];
     const filename = `${randomUUID()}.${ext}`;
     const filepath = path.join(this.tempDir, filename);
@@ -32,44 +34,61 @@ export class AudioService {
 
     try {
       if (file.buffer) {
+        this.logger.debug(`Guardando archivo temporal: ${filepath}`);
         fs.writeFileSync(filepath, file.buffer);
       }
 
-      // Siempre convertimos a WAV para garantizar que el archivo sea válido
+      this.logger.log('Convirtiendo audio a formato WAV');
       audioPathToUse = await this.convertAudioToWav(filepath);
-      console.log(`Audio path to use: ${audioPathToUse}`);
-
-      // Llamamos a nodewhisper pasando la ruta del archivo convertido y las opciones
+      
+      this.logger.log('Iniciando transcripción con Whisper');
       const transcription = await nodewhisper(audioPathToUse, this.defaultOptions);
-      return { text: transcription.trim() };
+      
+      this.logger.debug('Limpiando texto de transcripción');
+      const cleanText = transcription
+        .replace(/\[\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\]/g, '')
+        .trim()
+        .replace(/^\s+/gm, '');
+      
+      this.logger.log('Transcripción completada exitosamente');
+      return { text: cleanText };
     } catch (error: any) {
-      console.error('Error detallado en la transcripción:', error);
+      this.logger.error(`Error en la transcripción: ${error.message}`, error.stack);
       throw new Error(`Error al procesar el audio: ${error.message}`);
     } finally {
-      // Eliminamos los archivos temporales
       try {
+        this.logger.debug('Limpiando archivos temporales');
         if (fs.existsSync(filepath)) {
           fs.unlinkSync(filepath);
         }
-        if (typeof audioPathToUse !== 'undefined' && fs.existsSync(audioPathToUse)) {
+        if (!this.defaultOptions.removeWavFileAfterTranscription && 
+            typeof audioPathToUse === 'string' && 
+            fs.existsSync(audioPathToUse)) {
           fs.unlinkSync(audioPathToUse);
         }
       } catch (cleanupError) {
-        console.error('Error al limpiar archivos temporales:', cleanupError);
+        this.logger.warn('Error al limpiar archivos temporales', cleanupError);
       }
     }
   }
 
   private async convertAudioToWav(inputPath: string): Promise<string> {
-    // Se genera un nuevo nombre para el archivo convertido
     const outputPath = inputPath.replace(/\.[^/.]+$/, '_converted.wav');
+    this.logger.debug(`Convirtiendo audio: ${inputPath} -> ${outputPath}`);
+    
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
-        .audioFrequency(16000)
-        .audioChannels(1)
+        .audioFrequency(16000) // Frecuencia óptima para Whisper
+        .audioChannels(1)      // Mono audio para mejor rendimiento
         .audioCodec('pcm_s16le')
-        .on('end', () => resolve(outputPath))
-        .on('error', (err) => reject(new Error(`Error en FFmpeg: ${err.message}`)))
+        .on('end', () => {
+          this.logger.debug('Conversión de audio completada');
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          this.logger.error('Error en la conversión de audio', err);
+          reject(new Error(`Error en la conversión de audio: ${err.message}`));
+        })
         .save(outputPath);
     });
   }
