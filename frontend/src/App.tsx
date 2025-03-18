@@ -9,7 +9,8 @@ import './App.css';
 const App: React.FC = () => {
   const [transcript, setTranscript] = useState<string>('');
   const [formData, setFormData] = useState<FormData | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isProcessingTranscript, setIsProcessingTranscript] = useState<boolean>(false);
+  const [isProcessingForm, setIsProcessingForm] = useState<boolean>(false);
 
   const handleTranscriptReceived = (text: string) => {
     setTranscript(text);
@@ -36,18 +37,18 @@ const App: React.FC = () => {
         <AudioRecorder
           onTranscriptReceived={handleTranscriptReceived}
           onFormDataReceived={handleFormDataReceived}
-          isProcessing={isProcessing}
-          setIsProcessing={setIsProcessing}
+          isProcessing={isProcessingTranscript}
+          setIsProcessing={setIsProcessingTranscript}
         />
         
         <TranscriptDisplay
           transcript={transcript}
-          isLoading={isProcessing}
+          isLoading={isProcessingTranscript}
         />
         
         <DynamicForm
           formData={formData}
-          isLoading={isProcessing}
+          isLoading={isProcessingForm}
           onFieldChange={handleFieldChange}
         />
       </div>
